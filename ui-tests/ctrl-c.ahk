@@ -134,7 +134,7 @@ if (openSSHPath != '' and FileExist(openSSHPath . '\sshd.exe')) {
     Sleep 50
     Info('Waiting for clone to start')
     WinActivate('ahk_id ' . hwnd)
-    WaitForRegExInWindowsTerminal('remote: ', 'Timed out waiting for clone to start', 'Clone started', 5000, 'ahk_id ' . hwnd)
+    WaitForRegExInWindowsTerminal('remote: ', 'Timed out waiting for clone to start', 'Clone started', 15000, 'ahk_id ' . hwnd)
     Info('Trying to interrupt clone')
     Send('^C') ; interrupt clone
     Sleep 150
