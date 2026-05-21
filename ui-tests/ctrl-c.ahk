@@ -44,7 +44,7 @@ WaitForRegExInWindowsTerminal('>[ `n`r]*$', 'Timed out waiting for interrupt', '
 ; ping test (`cat.exe` should be interrupted, too)
 Send('git -c alias.c="{!}cat | /c/windows/system32/ping -t localhost" c{Enter}')
 Sleep 500
-WaitForRegExInWindowsTerminal('Pinging ', 'Timed out waiting for pinging to start', 'Pinging started')
+WaitForRegExInWindowsTerminal('Pinging ', 'Timed out waiting for pinging to start', 'Pinging started', 10000)
 Send('^C') ; interrupt ping and cat
 Sleep 150
 ; Wait for the `^C` tell-tale to appear
