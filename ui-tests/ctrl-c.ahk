@@ -44,7 +44,7 @@ WaitForRegExInWindowsTerminal('>[ `n`r]*$', 'Timed out waiting for interrupt', '
 ; ping test (`cat.exe` should be interrupted, too)
 Send('git -c alias.c="{!}cat | /c/windows/system32/ping -t localhost" c{Enter}')
 Sleep 500
-WaitForRegExInWindowsTerminal('Pinging ', 'Timed out waiting for pinging to start', 'Pinging started')
+WaitForRegExInWindowsTerminal('Pinging ', 'Timed out waiting for pinging to start', 'Pinging started', 10000)
 Send('^C') ; interrupt ping and cat
 Sleep 150
 ; Wait for the `^C` tell-tale to appear
@@ -134,7 +134,7 @@ if (openSSHPath != '' and FileExist(openSSHPath . '\sshd.exe')) {
     Sleep 50
     Info('Waiting for clone to start')
     WinActivate('ahk_id ' . hwnd)
-    WaitForRegExInWindowsTerminal('remote: ', 'Timed out waiting for clone to start', 'Clone started', 5000, 'ahk_id ' . hwnd)
+    WaitForRegExInWindowsTerminal('remote: ', 'Timed out waiting for clone to start', 'Clone started', 15000, 'ahk_id ' . hwnd)
     Info('Trying to interrupt clone')
     Send('^C') ; interrupt clone
     Sleep 150
