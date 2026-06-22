@@ -32,7 +32,7 @@ jobs:
           $p = Get-ChildItem -Recurse "${env:RUNNER_TEMP}\artifacts" | where {$_.Name -eq "msys-2.0.dll"} | Select -ExpandProperty VersionInfo | Select -First 1 -ExpandProperty FileName
           cp $p "c:/Program Files/Git/usr/bin/msys-2.0.dll"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             ui-tests
