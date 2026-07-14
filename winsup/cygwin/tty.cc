@@ -19,6 +19,7 @@ details. */
 #include "cygheap.h"
 #include "pinfo.h"
 #include "shared_info.h"
+#include "tls_pbuf.h"
 
 HANDLE NO_COPY tty_list::mutex = NULL;
 
@@ -121,6 +122,55 @@ tty_list::init ()
       ttys[i].init ();
       ttys[i].setntty (DEV_PTYS_MAJOR, i);
     }
+}
+
+/* Search for a pty whose pseudo console owns our console.
+   Return tty minor number or -1 if not found.
+   Called from init_std_file_from_handle() for processes started by
+   non-Cygwin parents to detect that inherited console handles are
+   from a pcon-backed pty.
+
+   The cheap precondition (any tty with pcon active in shared memory)
+   short-circuits the common case where no pty has a pseudo console
+   active, avoiding the GetConsoleProcessList() LPC call entirely. */
+int
+tty_list::find_pcon_pty ()
+{
+  tmp_pathbuf tp;
+  DWORD *pids = (DWORD *) tp.c_get ();
+  const DWORD buf_size = NT_MAX_PATH / sizeof (DWORD);
+  DWORD count = 0;
+  bool got_pids = false;
+
+  for (int i = 0; i < NTTYS; i++)
+    {
+      if (!ttys[i].has_active_pcon ())
+	continue;
+
+      /* Fetch the console process list lazily, only on first candidate.
+	 The buffer-too-large dance mirrors the one in termios.cc's
+	 get_console_process_id() and works around new condrv's dislike
+	 of oversized first-call buffers, see
+	 https://github.com/microsoft/terminal/issues/18264#issuecomment-2515448548 */
+      if (!got_pids)
+	{
+	  DWORD buf_size1 = 1;
+	  while ((count = GetConsoleProcessList (pids, buf_size1)) > buf_size1)
+	    {
+	      if (count > buf_size)
+		return -1;
+	      buf_size1 = count;
+	    }
+	  if (!count)
+	    return -1;
+	  got_pids = true;
+	}
+
+      for (DWORD j = 0; j < count; j++)
+	if (ttys[i].has_pcon_and_owner (pids[j]))
+	  return i;
+    }
+  return -1;
 }
 
 /* Search for a free tty and allocate it.

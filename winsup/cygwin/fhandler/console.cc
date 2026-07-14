@@ -420,6 +420,7 @@ fhandler_console::cons_master_thread (handle_set_t *p, tty *ttyp)
 
       if (con.disable_master_thread)
 	{
+	  con.master_thread_suspended = true;
 	  cygwait (40);
 	  continue;
 	}
@@ -934,9 +935,9 @@ fhandler_console::setup_for_non_cygwin_app ()
      console mode. */
   if (get_ttyp ()->getpgid () == myself->pgid)
     {
+      set_disable_master_thread (true, this);
       set_input_mode (tty::native, &tc ()->ti, get_handle_set ());
       set_output_mode (tty::native, &tc ()->ti, get_handle_set ());
-      set_disable_master_thread (true, this);
     }
 }
 
@@ -1219,7 +1220,7 @@ wait_retry:
 
       int ret;
       acquire_input_mutex (mutex_timeout);
-      ret = process_input_message ();
+      ret = process_input_message (buflen);
       switch (ret)
 	{
 	case input_error:
@@ -1274,9 +1275,10 @@ sig_exit:
 }
 
 fhandler_console::input_states
-fhandler_console::process_input_message (void)
+fhandler_console::process_input_message (size_t len)
 {
   char tmp[60];
+  size_t num_chars = 0;
 
   if (!shared_console_info[unit])
     return input_error;
@@ -1651,6 +1653,8 @@ fhandler_console::process_input_message (void)
 	  continue;
 	}
 
+      num_input_events_processed = i + 1;
+      num_chars += nread;
       if (toadd)
 	{
 	  ssize_t ret;
@@ -1668,25 +1672,50 @@ fhandler_console::process_input_message (void)
 		goto out;
 	    }
 	}
+      /* len == 0 if called from select.cc:peek_console() */
+      if (len && num_chars >= len)
+	goto out;
     }
 out:
+  if (len == 0)
+    /* If len == 0, cancel reading from console input buffer.
+       Clear readahead buffer. */
+    eat_readahead (-1);
   /* Discard processed recored. */
   DWORD discard_len = min (total_read, i + 1);
   /* If input is signalled, do not discard input here because
-     tcflush() is already called from line_edit(). */
-  if (stat == input_signalled && !(ti->c_lflag & NOFLSH))
+     discard_key_events() is already called from line_edit(). */
+  if (stat == input_signalled)
     discard_len = 0;
-  if (discard_len)
-    {
-      DWORD discarded;
-      acquire_attach_mutex (mutex_timeout);
-      DWORD resume_pid = attach_console (con.owner);
-      ReadConsoleInputW (get_handle (), input_rec, discard_len, &discarded);
-      detach_console (resume_pid, con.owner);
-      release_attach_mutex ();
-      con.num_processed -= min (con.num_processed, discarded);
-    }
+  if (discard_len && (len || stat != input_ok))
+    discard_key_events (discard_len);
   return stat;
+}
+
+void
+fhandler_console::discard_key_events (size_t n)
+{
+  DWORD discarded = 0;
+  if (n == 0)
+    {
+      n = num_input_events_processed;
+      num_input_events_processed = 0;
+    }
+  INPUT_RECORD input_rec[INREC_SIZE];
+  DWORD n1 = min (INREC_SIZE, n);
+  acquire_attach_mutex (mutex_timeout);
+  DWORD resume_pid = attach_console (con.owner);
+  while (n)
+    {
+      if (!ReadConsoleInputW (get_handle (), input_rec, n1, &n1) || !n1)
+	break;
+      n -= n1;
+      discarded += n1;
+      n1 = min (INREC_SIZE, n);
+    }
+  detach_console (resume_pid, con.owner);
+  release_attach_mutex ();
+  con.num_processed -= min (con.num_processed, discarded);
 }
 
 bool
@@ -2031,9 +2060,9 @@ fhandler_console::close (int flag)
       && (dev_t) myself->ctty == get_device ()
       && cons_mode_on_close (&handle_set) == tty::restore)
     {
+      set_disable_master_thread (true, this);
       set_output_mode (tty::restore, &get_ttyp ()->ti, &handle_set);
       set_input_mode (tty::restore, &get_ttyp ()->ti, &handle_set);
-      set_disable_master_thread (true, this);
     }
 
   if (shared_console_info[unit] && con.owner == GetCurrentProcessId ())
@@ -2269,7 +2298,8 @@ fhandler_console::tcgetattr (struct termios *t)
 
 fhandler_console::fhandler_console (fh_devices devunit) :
   fhandler_termios (), input_ready (false), thread_sync_event (NULL),
-  input_mutex (NULL), output_mutex (NULL), unit (MAX_CONS_DEV)
+  input_mutex (NULL), output_mutex (NULL), unit (MAX_CONS_DEV),
+  num_input_events_processed (0)
 {
   dev_referred_via = (dev_t) devunit;
   if (devunit > 0)
@@ -4357,10 +4387,10 @@ fhandler_console::set_console_mode_to_native ()
 	fhandler_console *cons = (fhandler_console *) (fhandler_base *) cfd;
 	if (cons->get_device () == cons->tc ()->getntty ())
 	  {
+	    set_disable_master_thread (true, cons);
 	    termios *cons_ti = &cons->tc ()->ti;
 	    set_input_mode (tty::native, cons_ti, cons->get_handle_set ());
 	    set_output_mode (tty::native, cons_ti, cons->get_handle_set ());
-	    set_disable_master_thread (true, cons);
 	    break;
 	  }
       }
@@ -4722,6 +4752,8 @@ fhandler_console::set_disable_master_thread (bool x, fhandler_console *cons)
   cons->acquire_input_mutex (mutex_timeout);
   con.disable_master_thread = x;
   cons->release_input_mutex ();
+  while (con.master_thread_suspended != x)
+    Sleep (1);
 }
 
 int
