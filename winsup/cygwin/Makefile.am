@@ -275,6 +275,7 @@ TZCODE_FILES= \
 DLL_FILES= \
 	advapi32.cc \
 	aio.cc \
+	appcontainer.cc \
 	assert.cc \
 	autoload.cc \
 	clock.cc \

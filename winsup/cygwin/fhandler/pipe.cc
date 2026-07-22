@@ -20,6 +20,7 @@ details. */
 #include "shared_info.h"
 #include "tls_pbuf.h"
 #include "sigproc.h"
+#include "appcontainer.h"
 #include <assert.h>
 
 /* This is only to be used for writing.  When reading,
@@ -800,8 +801,10 @@ fhandler_pipe::close (int flag)
 
 #ifdef __MSYS__
 #define PIPE_INTRO "\\\\.\\pipe\\msys-"
+#define PIPE_INTRO_AC "\\\\.\\pipe\\Local\\msys-"
 #else
 #define PIPE_INTRO "\\\\.\\pipe\\cygwin-"
+#define PIPE_INTRO_AC "\\\\.\\pipe\\Local\\cygwin-"
 #endif
 
 /* Create a pipe, and return handles to the read and write ends,
@@ -827,8 +830,17 @@ fhandler_pipe::create (LPSECURITY_ATTRIBUTES sa_ptr, PHANDLE r, PHANDLE w,
     psize = DEFAULT_PIPEBUFSIZE;
 
   char pipename[MAX_PATH];
-  size_t len = __small_sprintf (pipename, PIPE_INTRO "%S-",
-				      &cygheap->installation_key);
+  /* Under an AppContainer, a bare (non-namespace-qualified) pipe name is
+     rejected when creating the server (read) end -- Windows requires a
+     "Local\" prefix to trigger the same AppContainer namespace redirection
+     that ordinary Win32 named-object APIs (e.g. CreateEventW, confirmed via
+     a positive-control test under this exact token) already get for free.
+     Non-sandboxed behavior is completely unchanged. */
+  size_t len = appcontainer_current_process_is_sandboxed ()
+    ? __small_sprintf (pipename, PIPE_INTRO_AC "%S-",
+		       &cygheap->installation_key)
+    : __small_sprintf (pipename, PIPE_INTRO "%S-",
+		       &cygheap->installation_key);
   DWORD pipe_mode = PIPE_READMODE_BYTE | PIPE_REJECT_REMOTE_CLIENTS;
   if (!name)
     pipe_mode |= pipe_byte ? PIPE_TYPE_BYTE : PIPE_TYPE_MESSAGE;

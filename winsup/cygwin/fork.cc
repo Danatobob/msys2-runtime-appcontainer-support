@@ -24,6 +24,7 @@ details. */
 #include "dll_init.h"
 #include "cygmalloc.h"
 #include "ntdll.h"
+#include "appcontainer.h"
 
 #define NPIDS_HELD 4
 
@@ -119,7 +120,20 @@ child_info::prefork (bool detached)
 {
   if (!detached)
     {
-      if (!CreatePipe (&rd_proc_pipe, &wr_proc_pipe, &sec_none_nih, 16))
+      /* Under an AppContainer, a security descriptor not naming the current
+	 AppContainer SID is rejected -- same rule already found for the
+	 signal-delivery pipe in sigproc_init() (see appcontainer_get_current_sid()'s
+	 comment for the full explanation).  sec_none_nih (the default,
+	 token-derived security descriptor) doesn't include it.  Add it here
+	 when sandboxed; non-sandboxed behavior (ac_sid == NULL) is the
+	 original &sec_none_nih call, unchanged. */
+      char char_sa_buf[1024];
+      PSID ac_sid = appcontainer_get_current_sid ();
+      PSECURITY_ATTRIBUTES sa = ac_sid
+	? sec_user_nih ((PSECURITY_ATTRIBUTES) char_sa_buf, cygheap->user.sid (),
+			 ac_sid, GENERIC_ALL)
+	: &sec_none_nih;
+      if (!CreatePipe (&rd_proc_pipe, &wr_proc_pipe, sa, 16))
 	api_fatal ("prefork: couldn't create pipe process tracker, %E");
 
       if (!SetHandleInformation (wr_proc_pipe, HANDLE_FLAG_INHERIT,

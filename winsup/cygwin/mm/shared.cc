@@ -21,6 +21,7 @@ details. */
 #include "cygwin_version.h"
 #include "memory_layout.h"
 #include "spinlock.h"
+#include "appcontainer.h"
 #include <alloca.h>
 #include <wchar.h>
 
@@ -43,6 +44,13 @@ get_shared_parent_dir ()
 
   if (!shared_parent_dir)
     {
+      if (appcontainer_current_process_is_sandboxed ())
+	{
+	  shared_parent_dir = appcontainer_resolve_shared_parent_dir ();
+	  if (!shared_parent_dir)
+	    api_fatal ("appcontainer_resolve_shared_parent_dir failed");
+	  return shared_parent_dir;
+	}
       WCHAR bnoname[MAX_PATH];
       __small_swprintf (bnoname, L"\\BaseNamedObjects\\%s%s-%S",
 			cygwin_version.shared_id,
@@ -70,6 +78,13 @@ get_session_parent_dir ()
 
   if (!session_parent_dir)
     {
+      if (appcontainer_current_process_is_sandboxed ())
+	{
+	  session_parent_dir = appcontainer_resolve_shared_parent_dir ();
+	  if (!session_parent_dir)
+	    api_fatal ("appcontainer_resolve_shared_parent_dir failed");
+	  return session_parent_dir;
+	}
       PROCESS_SESSION_INFORMATION psi;
       status = NtQueryInformationProcess (NtCurrentProcess (),
 					  ProcessSessionInformation,

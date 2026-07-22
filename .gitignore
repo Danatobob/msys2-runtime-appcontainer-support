@@ -46,3 +46,17 @@ core
 !core/
 
 lost+found
+
+# AI-DLC: isolated project-local build toolchain and build output (Unit 1a)
+.build-toolchain/
+_dest/
+
+# AI-DLC: Unit 2 test harness build output
+tools/appcontainer-harness/bin/
+tools/appcontainer-harness/obj/
+.dirstamp
+*.exe
+winsup
+newlib
+Makefile
+/.idea

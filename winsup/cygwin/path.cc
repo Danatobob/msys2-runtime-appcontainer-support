@@ -4030,7 +4030,7 @@ readlink (const char *__restrict path, char *__restrict buf, size_t buflen)
 ino_t
 hash_path_name (ino_t hash, PUNICODE_STRING name)
 {
-  if (name->Length == 0)
+  if (!name || name->Length == 0)
     return hash;
 
   /* Build up hash. Name is already normalized */

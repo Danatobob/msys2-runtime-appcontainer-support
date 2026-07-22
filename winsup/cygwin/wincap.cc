@@ -33,6 +33,7 @@ static const wincaps wincap_8_1 = {
     has_con_broken_tabs:false,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -56,6 +57,7 @@ static const wincaps  wincap_10_1507 = {
     has_con_broken_tabs:false,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -79,6 +81,7 @@ static const wincaps  wincap_10_1607 = {
     has_con_broken_tabs:false,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -102,6 +105,7 @@ static const wincaps wincap_10_1703 = {
     has_con_broken_tabs:true,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -125,6 +129,7 @@ static const wincaps wincap_10_1709 = {
     has_con_broken_tabs:true,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -148,6 +153,7 @@ static const wincaps wincap_10_1803 = {
     has_con_broken_tabs:true,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -171,6 +177,7 @@ static const wincaps wincap_10_1809 = {
     has_con_broken_tabs:true,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -194,6 +201,7 @@ static const wincaps wincap_10_1903 = {
     has_con_broken_tabs:true,
     has_user_shstk:false,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -217,6 +225,7 @@ static const wincaps wincap_10_2004 = {
     has_con_broken_tabs:true,
     has_user_shstk:true,
     has_pcon_omit_nl_before_cursor_move:false,
+    has_appcontainer_support:true,
   },
 };
 
@@ -240,6 +249,7 @@ static const wincaps wincap_11 = {
     has_con_broken_tabs:false,
     has_user_shstk:true,
     has_pcon_omit_nl_before_cursor_move:true,
+    has_appcontainer_support:true,
   },
 };
 
@@ -248,13 +258,53 @@ wincapc wincap __attribute__((section (".cygwin_dll_common"), shared));
 extern IMAGE_DOS_HEADER
 __image_base__;
 
+/* Indices into the process-private lookup table below.  0 is reserved to
+   mean "not yet initialized" (matching the shared section's zero-init
+   default), so these start at 1.  See the comment on wincapc::caps_idx in
+   wincap.h for why this is an index rather than a raw pointer. */
+enum
+{
+  WINCAP_IDX_8_1 = 1,
+  WINCAP_IDX_10_1507,
+  WINCAP_IDX_10_1607,
+  WINCAP_IDX_10_1703,
+  WINCAP_IDX_10_1709,
+  WINCAP_IDX_10_1803,
+  WINCAP_IDX_10_1809,
+  WINCAP_IDX_10_1903,
+  WINCAP_IDX_10_2004,
+  WINCAP_IDX_11,
+};
+
+const wincaps *
+wincapc::table (int idx)
+{
+  /* Ordinary (non-shared) static data: the compiler/loader gives each
+     process its own correctly-relocated copy of this array, unlike the
+     `wincap` object itself. */
+  static const wincaps *const tbl[] = {
+    NULL,		/* index 0 unused ("not yet initialized") */
+    &wincap_8_1,
+    &wincap_10_1507,
+    &wincap_10_1607,
+    &wincap_10_1703,
+    &wincap_10_1709,
+    &wincap_10_1803,
+    &wincap_10_1809,
+    &wincap_10_1903,
+    &wincap_10_2004,
+    &wincap_11,
+  };
+  return tbl[idx];
+}
+
 void
 wincapc::init ()
 {
   PIMAGE_NT_HEADERS ntheader;
   USHORT emul_mach;
 
-  if (caps)
+  if (caps_idx)
     return;		// already initialized
 
   GetSystemInfo (&system_info);
@@ -270,28 +320,28 @@ wincapc::init ()
   switch (version.dwMajorVersion)
     {
       case 6:
-	caps = &wincap_8_1;
+	caps_idx = WINCAP_IDX_8_1;
 	break;
       case 10:
       default:
 	if (likely (version.dwBuildNumber >= 22000))
-	  caps = &wincap_11;
+	  caps_idx = WINCAP_IDX_11;
 	else if (version.dwBuildNumber >= 19041)
-	  caps = &wincap_10_2004;
+	  caps_idx = WINCAP_IDX_10_2004;
 	else if (version.dwBuildNumber >= 18362)
-	  caps = &wincap_10_1903;
+	  caps_idx = WINCAP_IDX_10_1903;
 	else if (version.dwBuildNumber >= 17763)
-	  caps = &wincap_10_1809;
+	  caps_idx = WINCAP_IDX_10_1809;
 	else if (version.dwBuildNumber >= 17134)
-	  caps = &wincap_10_1803;
+	  caps_idx = WINCAP_IDX_10_1803;
 	else if (version.dwBuildNumber >= 16299)
-	  caps = &wincap_10_1709;
+	  caps_idx = WINCAP_IDX_10_1709;
 	else if (version.dwBuildNumber >= 15063)
-	  caps = &wincap_10_1703;
+	  caps_idx = WINCAP_IDX_10_1703;
 	else if (version.dwBuildNumber >= 14393)
-	  caps = &wincap_10_1607;
+	  caps_idx = WINCAP_IDX_10_1607;
 	else
-	  caps = & wincap_10_1507;
+	  caps_idx = WINCAP_IDX_10_1507;
     }
 
   _is_server = (version.wProductType != VER_NT_WORKSTATION);

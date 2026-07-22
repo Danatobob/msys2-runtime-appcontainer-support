@@ -21,6 +21,7 @@ details. */
 #include "cygtls.h"
 #include "ntdll.h"
 #include "exception.h"
+#include "appcontainer.h"
 #include <assert.h>
 
 /*
@@ -524,7 +525,17 @@ void
 sigproc_init ()
 {
   char char_sa_buf[1024];
-  PSECURITY_ATTRIBUTES sa = sec_user_nih ((PSECURITY_ATTRIBUTES) char_sa_buf, cygheap->user.sid());
+  /* Under an AppContainer, a DACL granting only the real Windows user SID
+     is rejected when re-opening the just-created pipe's write end by name
+     -- Windows additionally requires an ACE naming the current AppContainer
+     SID itself (see appcontainer_get_current_sid()'s comment for the full
+     explanation).  Add it here when sandboxed; non-sandboxed behavior
+     (ac_sid == NULL) is completely unchanged. */
+  PSID ac_sid = appcontainer_get_current_sid ();
+  PSECURITY_ATTRIBUTES sa = ac_sid
+    ? sec_user_nih ((PSECURITY_ATTRIBUTES) char_sa_buf, cygheap->user.sid (),
+		     ac_sid, GENERIC_ALL)
+    : sec_user_nih ((PSECURITY_ATTRIBUTES) char_sa_buf, cygheap->user.sid ());
   DWORD err = fhandler_pipe::create (sa, &my_readsig, &my_sendsig,
 				     PIPE_DEPTH * sizeof (sigpacket), "sigwait",
 				     PIPE_ADD_PID);

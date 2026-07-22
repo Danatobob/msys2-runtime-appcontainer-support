@@ -34,6 +34,7 @@ struct wincaps
     unsigned has_con_broken_tabs				: 1;
     unsigned has_user_shstk					: 1;
     unsigned has_pcon_omit_nl_before_cursor_move		: 1;
+    unsigned has_appcontainer_support				: 1;
   };
 };
 
@@ -42,10 +43,26 @@ class wincapc
   SYSTEM_INFO		system_info;
   RTL_OSVERSIONINFOEXW	version;
   char			osnam[40];
-  const void		*caps;
+  /* Index (1-based; 0 means "not yet initialized") into a small,
+     process-private lookup table of `const wincaps *`, rather than a raw
+     pointer.  `wincap` (this whole object) lives in a genuinely
+     cross-process SHARED memory section (see the "shared" attribute on its
+     definition in wincap.cc) with an init-once-ever guard -- storing a raw
+     pointer there is unsafe if this DLL is ever relocated to a different
+     base address in different processes sharing that memory (confirmed to
+     happen for forked children under an AppContainer token: the parent
+     process sets the pointer relative to its own load address, then a
+     forked child loading the same not-yet-recompiled DLL image at a
+     different relocated base sees the same shared, now-dangling pointer
+     value and crashes dereferencing it).  A small integer index has no such
+     problem -- each process resolves it via its own private, correctly
+     relocated copy of the lookup table. */
+  int			caps_idx;
   USHORT		host_mach;
   USHORT		cygwin_mach;
   bool			_is_server;
+
+  static const wincaps *table (int idx);
 
 public:
   void init ();
@@ -67,7 +84,7 @@ public:
   const USHORT host_machine () const { return host_mach; }
   const USHORT cygwin_machine () const { return cygwin_mach; }
 
-#define IMPLEMENT(cap) cap() const { return ((wincaps *) this->caps)->cap; }
+#define IMPLEMENT(cap) cap() const { return table (caps_idx)->cap; }
 
   DWORD def_guard_page_size () const
   {
@@ -92,10 +109,11 @@ public:
   bool	IMPLEMENT (has_con_broken_tabs)
   bool	IMPLEMENT (has_user_shstk)
   bool	IMPLEMENT (has_pcon_omit_nl_before_cursor_move)
+  bool	IMPLEMENT (has_appcontainer_support)
 
   void disable_case_sensitive_dirs ()
   {
-    ((wincaps *)caps)->has_case_sensitive_dirs = false;
+    ((wincaps *) table (caps_idx))->has_case_sensitive_dirs = false;
   }
 #undef IMPLEMENT
 };
